@@ -1,0 +1,100 @@
+---
+title: "p8105_hw2_yd2865"
+author: "Yan Duan"
+date: "2025-09-16"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+```
+
+I'm an R Markdown document! 
+
+
+## Problem 1
+
+#### Clean the data in pols-month.csv
+```{r}
+pols_df = 
+  read_csv("./fivethirtyeight_datasets/pols-month.csv", na = c("NA", ".", "")) |> 
+  janitor::clean_names() |> 
+  separate(mon, into = c("year", "month", "day"), sep = "-" ) |> 
+  mutate(
+    year = as.integer(year),
+    month = factor(month.name[as.integer(month)],
+         levels = month.name),
+         president = 
+           case_when(
+             prez_gop == 1 ~ "gop",
+             prez_dem == 1 ~ "dem")) |> 
+  select(year, month, president, everything(), -day, -prez_gop, -prez_dem) |> 
+  arrange(year, month)
+pols_df
+```
+
+
+#### Clean the data in snp.csv 
+```{r}
+snp_df = 
+  read_csv("./fivethirtyeight_datasets/snp.csv", na = c("NA", ".", "")) |> 
+  janitor::clean_names() |>
+  separate(date, into = c("year", "month", "day"), sep = "/") |> 
+  mutate(
+   year = as.integer(year),
+   year  = if_else(year <= 25, 2000L + year, 1900L + year),
+   month = factor(month.name[as.integer(month)],
+         levels = month.name)) |> 
+  select(year, month, close) |> 
+  arrange(year, month)
+snp_df
+```
+
+
+#### Tidy the unemployment data 
+
+```{r}
+unemp_df =
+  read_csv("./fivethirtyeight_datasets/unemployment.csv") |>
+  janitor::clean_names() |>
+  pivot_longer(
+    jan:dec,
+    names_to = "month",
+    values_to = "unemp_rate") |>
+   mutate(
+    year = as.integer(year),
+    month = match(str_to_title(month), month.abb),
+    month = factor(month.name[as.integer(month)],
+         levels = month.name)) |> 
+  arrange(year, month)
+unemp_df
+```
+
+#### Joining datasets
+
+```{r}
+# Join the datasets by merging `snp` into `pols`
+
+pols_snp =
+  left_join(pols_df, snp_df, by = c("year", "month")) 
+
+# Merging `unemployment` into the result
+merged_df = 
+  left_join(pols_snp, unemp_df, by = c("year", "month")) 
+merged_df
+```
+
+This analysis utilized three datasets: `pols-month.csv`, `snp.csv` and `unemployment.csv`. 
+
+* The `pols_df` dataset, after being organized, contains monthly data on the political structure of the United States starting from 1947, including `year`, `month`, `president` (the political party of the president, `gop` or `dem`), and the distribution numbers of state governors, senators, and representatives between the two parties (such as `gov_gop`, `sen_gop`, `rep_dem`). 
+* The `snp_df` provides the monthly closing prices of the S&P 500 index during the same period (use variable `close`), with `year` and `month` serving as the keys. 
+* The variable `unemp_df` represents the monthly unemployment rate in the United States. Originally, it was stored in columns for 12 months. After being organized, it was transformed into "long format" and the same keys of `year` and `month` were used.
+
+During the cleaning process, the date variables in all three datasets were unified into `year` and `month`, and the months were standardized to the full English names of the months to ensure a smooth merge. Eventually, we used the `left_join()` function to first merge the `snp_df` into the `pols_df`, and then merge the `unemp_df`, resulting in the `merged_df` data frame which contains approximately 1,571 monthly observation records. The time span ranges from January 1947 to around June 2015. 
+
+The final table integrates the political structure, the closing prices of the stock market, and the unemployment rate, providing a complete time series of data for analyzing the relationship between the political and economic fluctuations in the United States.
+
+
+
