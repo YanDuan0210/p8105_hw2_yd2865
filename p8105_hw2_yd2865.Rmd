@@ -17,7 +17,7 @@ I'm an R Markdown document!
 
 ## Problem 1
 
-#### Clean the data in pols-month.csv
+#### Clean the data in `pols-month.csv`
 ```{r}
 pols_df = 
   read_csv("./fivethirtyeight_datasets/pols-month.csv", na = c("NA", ".", "")) |> 
@@ -37,7 +37,7 @@ pols_df
 ```
 
 
-#### Clean the data in snp.csv 
+#### Clean the data in `snp.csv` 
 ```{r}
 snp_df = 
   read_csv("./fivethirtyeight_datasets/snp.csv", na = c("NA", ".", "")) |> 
@@ -54,7 +54,7 @@ snp_df
 ```
 
 
-#### Tidy the unemployment data 
+#### Tidy the `unemployment` data 
 
 ```{r}
 unemp_df =
@@ -140,6 +140,7 @@ gwyn_df =
 ```
 
 #### Tidy and clean data
+
 ```{r}
 wheel_tidy = 
   bind_rows(mr_df, prof_df, gwyn_df) |>   # Merge the three datasets
@@ -203,4 +204,112 @@ To distinguish the data from different devices, we added a variable `wheel` for 
 
 The post-organized `wheel_tidy` dataset contains a total of 1,188 observation records and 12 variables, which comprehensively reflects the trash collection situation of the three devices since their respective commissioning.
 
+
+## Problem 3
+
+#### Read, tidy and clean the data in `Zip Codes.csv` 
+
+```{r}
+zip_df = 
+  read_csv("./zillow_data/Zip Codes.csv", na = c("NA", ".", "")) |> 
+  janitor::clean_names() |> 
+  mutate(
+    county = str_to_title(county),
+    zipcode = as.character(zip_code),
+    neighborhood = as.character(na_if(neighborhood, "NA") ),
+    borough = recode(county,
+                     "Bronx"   = "Bronx",
+                     "Kings"   = "Brooklyn",
+                     "New York"= "Manhattan",
+                     "Queens"  = "Queens",
+                     "Richmond"= "Staten Island")) |>
+  select(-zip_code) |>  
+  filter(!is.na(zipcode))
+zip_df
+```
+
+#### Read, tidy and clean the Zillow data
+
+```{r}
+zori_df = 
+  read_csv("./zillow_data/Zip_zori_uc_sfrcondomfr_sm_month_NYC.csv", na = c("NA", ".", "")) |> 
+  janitor::clean_names() |> 
+  mutate(
+    zipcode = str_pad(as.character(region_name), 5, pad = "0")) |> 
+  pivot_longer(       # Arrange the date data into a single column
+    cols = 10:125,              
+    names_to  = "month",
+    values_to = "zori") |> 
+  mutate(
+    month = month |>
+      str_remove("^(x|X)") |> 
+      str_replace_all("[_./]", "-") |>
+      ymd(),
+    zori  = as.numeric(zori)) |> 
+  filter(month >= ymd("2015-01-01"), month <= ymd("2024-08-31")) |> 
+  select(region_id, zipcode, county_name, month, zori) |> 
+  arrange(zipcode, month)
+zori_df
+```
+
+# Joining datasets
+```{r}
+zori_tidy = 
+  left_join(zip_df, zori_df, by = "zipcode") |>
+  select(zipcode, borough, neighborhood, month, zori,
+         county = county_name) |>
+  arrange(zipcode, month, borough, neighborhood)
+zori_tidy
+```
+
+#### Problem 3.1
+
+```{r}
+summary_df =
+  zori_tidy |>
+  summarise(
+    total_obs = n(),       # The number of observations                     
+    unique_zipcode = length(unique(zipcode)),  # The number of unique ZIP codes
+    unique_hood = length(unique(neighborhood[!is.na(neighborhood)])))  # The number of unique neighborhoods
+summary_df
+```
+
+#### Problem 3.2
+
+```{r}
+zip_in_zipcode =
+  zip_df |>
+  anti_join(unique(zori_df["zipcode"]), by = "zipcode") |>
+  arrange(borough, zipcode)
+zip_in_zipcode
+```
+
+The reason why the postal codes might be excluded from the Zillow dataset is:
+
+* Some data quality filtering: Abnormal noise or unstable sequences are excluded.
+* Small areas at the periphery such as airports or cross-county boundaries may not have been collected. 
+* Transaction volume is too low, and Zillow does not publish it.
+
+
+#### Problem 3.3
+
+```{r}
+drop_top10 =
+  zori_tidy |>
+  filter(month == ymd("2020-01-31") | month == ymd("2021-01-31")) |>
+  mutate(date_select = if_else(month == ymd("2020-01-31"), "Jan2020", "Jan2021")) |>
+  select(zipcode, borough, neighborhood, date_select, zori) |>
+  pivot_wider(names_from = date_select, values_from = zori) |>
+  mutate(
+    abs_change  = Jan2021 - Jan2020,             
+    pct_change  = (Jan2021 - Jan2020) / Jan2020
+  ) |>
+  arrange(abs_change) |>
+  slice_head(n = 10) |>
+  select(zipcode, borough, neighborhood,
+         price_2020_01 = Jan2020,
+         price_2021_01 = Jan2021,
+         abs_change, pct_change)
+drop_top10
+```
 
