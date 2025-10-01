@@ -42,10 +42,12 @@ pols_df
 snp_df = 
   read_csv("./fivethirtyeight_datasets/snp.csv", na = c("NA", ".", "")) |> 
   janitor::clean_names() |>
-  separate(date, into = c("year", "month", "day"), sep = "/") |> 
+  mutate(
+   date  = mdy(date),
+   date = if_else(date > Sys.Date(), date %m-% years(100), date)) |> 
+  separate(date, into = c("year", "month", "day"), sep = "-") |>
   mutate(
    year = as.integer(year),
-   year  = if_else(year <= 25, 2000L + year, 1900L + year),
    month = factor(month.name[as.integer(month)],
          levels = month.name)) |> 
   select(year, month, close) |> 
@@ -202,29 +204,29 @@ We used the `bind_rows()` function to combine the three datasets into a tidy dat
 During the cleaning process, we standardized the variable names and data formats for the three datasets, and rounded the value of `sports` to an integer.
 To distinguish the data from different devices, we added a variable `wheel` for each sub-dataset, with the values being `Mr`, `Professor` and `Gwynnda` respectively.
 
-The post-organized `wheel_tidy` dataset contains a total of 1,188 observation records and 12 variables, which comprehensively reflects the trash collection situation of the three devices since their respective commissioning.
+The post-organized `wheel_tidy` dataset contains a total of 1,188 observation records and 12 variables. Using the functions `filter()` and `summarise()` to conduct conditional filtering and group summarization on the data, the total weight of Professor's trash collection is 282. and Gwynnda collected 18,120 cigarette butts in June 2022, which comprehensively reflects the trash collection situation of the three devices since their respective commissioning.
 
 
 ## Problem 3
 
 #### Read, tidy and clean the data in `Zip Codes.csv` 
 
+
 ```{r}
 zip_df = 
   read_csv("./zillow_data/Zip Codes.csv", na = c("NA", ".", "")) |> 
   janitor::clean_names() |> 
   mutate(
-    county = str_to_title(county),
-    zipcode = as.character(zip_code),
-    neighborhood = as.character(na_if(neighborhood, "NA") ),
-    borough = recode(county,
+    zipcode = as.integer(zip_code),
+    neighborhood = as.character(neighborhood),
+    country = as.character(county),
+    borough = recode(county,     # Recoded into the 5 borough of New York City
                      "Bronx"   = "Bronx",
                      "Kings"   = "Brooklyn",
                      "New York"= "Manhattan",
                      "Queens"  = "Queens",
                      "Richmond"= "Staten Island")) |>
-  select(-zip_code) |>  
-  filter(!is.na(zipcode))
+  select(county, zipcode, neighborhood, borough) 
 zip_df
 ```
 
@@ -234,31 +236,33 @@ zip_df
 zori_df = 
   read_csv("./zillow_data/Zip_zori_uc_sfrcondomfr_sm_month_NYC.csv", na = c("NA", ".", "")) |> 
   janitor::clean_names() |> 
+  rename(zipcode = region_name) |> 
   mutate(
-    zipcode = str_pad(as.character(region_name), 5, pad = "0")) |> 
+    county_name = str_replace(county_name, "county", ""),
+    zipcode = as.integer(zipcode)) |>
   pivot_longer(       # Arrange the date data into a single column
     cols = 10:125,              
-    names_to  = "month",
-    values_to = "zori") |> 
-  mutate(
-    month = month |>
-      str_remove("^(x|X)") |> 
-      str_replace_all("[_./]", "-") |>
-      ymd(),
-    zori  = as.numeric(zori)) |> 
-  filter(month >= ymd("2015-01-01"), month <= ymd("2024-08-31")) |> 
-  select(region_id, zipcode, county_name, month, zori) |> 
-  arrange(zipcode, month)
+    names_to  = "date",
+    values_to = "zori",
+    names_prefix = "x") |> 
+  select(region_id, zipcode, county_name, date, zori) |> 
+  arrange(zipcode, date)
 zori_df
 ```
 
-# Joining datasets
+#### Joining datasets
 ```{r}
+zip_info_one =     # Remove duplicate data
+  zip_df |>
+  mutate(zipcode = as.integer(zipcode)) |>
+  distinct(zipcode, .keep_all = TRUE)
 zori_tidy = 
-  left_join(zip_df, zori_df, by = "zipcode") |>
-  select(zipcode, borough, neighborhood, month, zori,
+  zori_df |>
+  left_join(zip_info_one, by = "zipcode") |>
+  arrange(zipcode, date) |> 
+  select(zipcode, borough, neighborhood, date, zori,
          county = county_name) |>
-  arrange(zipcode, month, borough, neighborhood)
+  arrange(zipcode, date, borough,neighborhood)
 zori_tidy
 ```
 
@@ -268,11 +272,14 @@ zori_tidy
 summary_df =
   zori_tidy |>
   summarise(
-    total_obs = n(),       # The number of observations                     
+    n_obs = nrow(zori_tidy),       # The number of observations                     
     unique_zipcode = length(unique(zipcode)),  # The number of unique ZIP codes
-    unique_hood = length(unique(neighborhood[!is.na(neighborhood)])))  # The number of unique neighborhoods
+    unique_hood = length(unique(neighborhood)))  # The number of unique neighborhoods
 summary_df
 ```
+
+The "ZIP Codes" data and "Zillow" data were integrated into a neat dataset named `zori_tidy`. The generated result shows that there are a total of 17,284 rental observation data, covering 149 ZIP codes and distributed across 43 neighborhoods.
+
 
 #### Problem 3.2
 
@@ -294,22 +301,33 @@ The reason why the postal codes might be excluded from the Zillow dataset is:
 #### Problem 3.3
 
 ```{r}
-drop_top10 =
+zori_2020 = 
   zori_tidy |>
-  filter(month == ymd("2020-01-31") | month == ymd("2021-01-31")) |>
-  mutate(date_select = if_else(month == ymd("2020-01-31"), "Jan2020", "Jan2021")) |>
-  select(zipcode, borough, neighborhood, date_select, zori) |>
-  pivot_wider(names_from = date_select, values_from = zori) |>
-  mutate(
-    abs_change  = Jan2021 - Jan2020,             
-    pct_change  = (Jan2021 - Jan2020) / Jan2020
-  ) |>
-  arrange(abs_change) |>
-  slice_head(n = 10) |>
-  select(zipcode, borough, neighborhood,
-         price_2020_01 = Jan2020,
-         price_2021_01 = Jan2021,
-         abs_change, pct_change)
+  filter(date == "2020_01_31") |> 
+  select(zipcode, borough, neighborhood, Jan2020 = zori)
+zori_2021 =
+  zori_tidy |>
+  filter(date == "2021_01_31") |> 
+  select(zipcode, borough, neighborhood, Jan2021 = zori)
+zori_change = 
+  zori_tidy |>
+  distinct(zipcode, borough, neighborhood) |> 
+  left_join(zori_2020, by = "zipcode") |> 
+  left_join(zori_2021, by = "zipcode") |> 
+  mutate(change = Jan2021 - Jan2020) |> 
+  arrange(change)
+drop_top10 = 
+  zori_change |> 
+  slice_head(n = 10) |> 
+  select(
+    zipcode, borough, neighborhood,
+    price_2020_01 = Jan2020,
+    price_2021_01 = Jan2021,
+    change
+  )
 drop_top10
 ```
 
+Based on the rental data from `2020_01_31` and `2021_01_31` in the "Zillow" dataset, identify the ZIP Code in New York City where the rental rate decreased the most during the COVID-19 pandemic. This data covers the five boroughs of New York and their neighborhoods, and it can reflect the significant fluctuations in housing rents before and after the epidemic.
+
+According to the generated data, the top 10 ZIP Codes with the most significant rent decreases are all located in Manhattan, with the rent drops ranging from `-685.` to `-913.` dollars. It indicates that the impact of the epidemic was most significant on the rents in the core residential areas of Manhattan.
