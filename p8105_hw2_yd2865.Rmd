@@ -6,7 +6,7 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(readxl)
@@ -33,7 +33,6 @@ pols_df =
              prez_dem == 1 ~ "dem")) |> 
   select(year, month, president, everything(), -day, -prez_gop, -prez_dem) |>  # Remove three variables
   arrange(year, month)
-pols_df
 ```
 
 
@@ -52,7 +51,6 @@ snp_df =
          levels = month.name)) |> 
   select(year, month, close) |> 
   arrange(year, month)
-snp_df
 ```
 
 
@@ -72,7 +70,6 @@ unemp_df =
     month = factor(month.name[as.integer(month)],
          levels = month.name)) |> 
   arrange(year, month)
-unemp_df
 ```
 
 #### Joining datasets
@@ -91,11 +88,11 @@ merged_df
 
 This analysis utilized three datasets: `pols-month.csv`, `snp.csv` and `unemployment.csv`. 
 
-* The `pols_df` dataset, after being organized, contains monthly data on the political structure of the United States starting from 1947, including `year`, `month`, `president` (the political party of the president, `gop` or `dem`), and the distribution numbers of state governors, senators, and representatives between the two parties (such as `gov_gop`, `sen_gop`, `rep_dem`). 
-* The `snp_df` provides the monthly closing prices of the S&P 500 index during the same period (use variable `close`), with `year` and `month` serving as the keys. 
-* The variable `unemp_df` represents the monthly unemployment rate in the United States. Originally, it was stored in columns for 12 months. After being organized, it was transformed into "long format" and the same keys of `year` and `month` were used.
+* The `pols_df` dataset has 822 rows × 9 columns , after being organized, contains monthly data on the political structure of the United States starting from 1947, including `year`, `month`, `president` (the political party of the president, `gop` or `dem`), and the distribution numbers of state governors, senators, and representatives between the two parties (such as `gov_gop`, `sen_gop`, `rep_dem`). 
+* The `snp_df` with 787 rows × 2 columns provides the monthly closing prices of the S&P 500 index during the same period (use variable `close`), with `year` and `month` serving as the keys. 
+* The variable `unemp_df` with 68 rows × 13 columns represents the monthly unemployment rate in the United States. Originally, it was stored in columns for 12 months. After being organized, it was transformed into "long format" and the same keys of `year` and `month` were used.
 
-During the cleaning process, the date variables in all three datasets were unified into `year` and `month`, and the months were standardized to the full English names of the months to ensure a smooth merge. Eventually, we used the `left_join()` function to first merge the `snp_df` into the `pols_df`, and then merge the `unemp_df`, resulting in the `merged_df` data frame which contains approximately 1,571 monthly observation records. The time span ranges from January 1947 to around June 2015. 
+During the cleaning process, the date variables in all three datasets were unified into `year` and `month`, and the months were standardized to the full English names of the months to ensure a smooth merge. Eventually, we used the `left_join()` function to first merge the `snp_df` into the `pols_df`, and then merge the `unemp_df`, resulting in the `merged_df` data frame which contains approximately 822 monthly observation records. The time span ranges from January 1947 to around June 2015. 
 
 The final table integrates the political structure, the closing prices of the stock market, and the unemployment rate, providing a complete time series of data for analyzing the relationship between the political and economic fluctuations in the United States.
 
@@ -171,7 +168,7 @@ wheel_tidy
 #### The total number of observations after merging the datasets
 
 ```{r}
-nrow(wheel_tidy)
+n_obs = nrow(wheel_tidy)
 ```
 
 #### Calculate the total weight of the trash of "Professor Trash Wheel"
@@ -180,8 +177,7 @@ prof_total_weight =
   wheel_tidy |>
   drop_na(weight) |>
   filter(wheel == "Professor") |> 
-  summarise(total_weight = sum(weight))
-prof_total_weight
+  summarise(total_weight = format(round(sum(weight), 2), nsmall = 2))
 ```
 
 #### Calculate the total number of cigarette butts collected by Gwynnda in June 2022
@@ -192,7 +188,6 @@ gwyn_cigs_jun22 =
   filter(wheel == "Gwynnda",
          year(date) == 2022, month(date) == 6) |>
   summarise(total_cigarette = sum(cigarette))
-gwyn_cigs_jun22
 ```
 
 This analysis utilized three datasets: "Mr. Trash Wheel", "Professor Trash Wheel" and "Gwynnda Falls Trash Wheel".
@@ -204,7 +199,7 @@ We used the `bind_rows()` function to combine the three datasets into a tidy dat
 During the cleaning process, we standardized the variable names and data formats for the three datasets, and rounded the value of `sports` to an integer.
 To distinguish the data from different devices, we added a variable `wheel` for each sub-dataset, with the values being `Mr`, `Professor` and `Gwynnda` respectively.
 
-The post-organized `wheel_tidy` dataset contains a total of 1,188 observation records and 12 variables. Using the functions `filter()` and `summarise()` to conduct conditional filtering and group summarization on the data, the total weight of Professor's trash collection is 282. and Gwynnda collected 18,120 cigarette butts in June 2022, which comprehensively reflects the trash collection situation of the three devices since their respective commissioning.
+The post-organized `wheel_tidy` dataset contains a total of **`r n_obs`** observation records. Using the functions `filter()` and `summarise()` to conduct conditional filtering and group summarization on the data, the total weight of Professor's trash collection is **`r prof_total_weight`** tons and Gwynnda collected **`r format(gwyn_cigs_jun22$total_cigarette, big.mark = ",")`** cigarette butts in June 2022, which comprehensively reflects the trash collection situation of the three devices since their respective commissioning.
 
 
 ## Problem 3
@@ -227,7 +222,6 @@ zip_df =
                      "Queens"  = "Queens",
                      "Richmond"= "Staten Island")) |>
   select(county, zipcode, neighborhood, borough) 
-zip_df
 ```
 
 #### Read, tidy and clean the Zillow data
@@ -247,7 +241,6 @@ zori_df =
     names_prefix = "x") |> 
   select(region_id, zipcode, county_name, date, zori) |> 
   arrange(zipcode, date)
-zori_df
 ```
 
 #### Joining datasets
@@ -323,11 +316,19 @@ drop_top10 =
     zipcode, borough, neighborhood,
     price_2020_01 = Jan2020,
     price_2021_01 = Jan2021,
-    change
-  )
-drop_top10
+    change) |> 
+  mutate(
+    price_2020_01 = format(round(price_2020_01, 2), nsmall = 2),
+    price_2021_01 = format(round(price_2021_01, 2), nsmall = 2),
+    change       = format(round(change, 2), nsmall = 2))
+```
+
+```{r}
+knitr::kable(drop_top10,
+             col.names = c("zipcode", "borough", "neighborhood",
+                           "price_2020_01", "price_2021_01", "Change"))
 ```
 
 Based on the rental data from `2020_01_31` and `2021_01_31` in the "Zillow" dataset, identify the ZIP Code in New York City where the rental rate decreased the most during the COVID-19 pandemic. This data covers the five boroughs of New York and their neighborhoods, and it can reflect the significant fluctuations in housing rents before and after the epidemic.
 
-According to the generated data, the top 10 ZIP Codes with the most significant rent decreases are all located in Manhattan, with the rent drops ranging from `-685.` to `-913.` dollars. It indicates that the impact of the epidemic was most significant on the rents in the core residential areas of Manhattan.
+According to the generated data, the top 10 ZIP Codes with the most significant rent decreases are all located in Manhattan, with the rent drops ranging from -684.93 to -912.60 dollars. It indicates that the impact of the epidemic was most significant on the rents in the core residential areas of Manhattan.
